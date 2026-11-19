@@ -1,0 +1,10 @@
+# Secrets — the PageSpeed API key lives here or in the shell environment, never in code
+.env
+.env.*
+
+# Raw PageSpeed responses (large; may echo request metadata)
+data/raw/
+data/errors.csv
+data/run.log
+
+node_modules/

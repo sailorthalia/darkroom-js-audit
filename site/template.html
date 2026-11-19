@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JavaScript Performance Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0d0d0d; --ink-2:#3a3a3a; --muted:#6b6b6b; --line:#e6e6e6; --line-2:#f2f2f2;
+  --bg:#ffffff; --panel:#fafafa; --accent:#f000d0; --accent-soft:#fde6fa;
+  --good:#1d7a4c; --good-bg:#e7f4ec; --ni:#a86a00; --ni-bg:#fbf1dc; --poor:#c22f2f; --poor-bg:#fbe7e7;
+  --radius:8px; --serif:"Instrument Serif",Georgia,"Times New Roman",serif;
+  --sans:"Hanken Grotesk",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 var(--sans);text-transform:lowercase}
+code,pre,.url,.keep-case{text-transform:none}
+a{color:var(--ink);text-decoration-color:var(--accent);text-underline-offset:3px}
+a:hover{color:var(--accent)}
+.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+@media (max-width:640px){.wrap{padding:0 16px}}
+
+/* nav */
+nav.top{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+nav.top .wrap{display:flex;align-items:center;gap:20px;height:56px;overflow-x:auto;scrollbar-width:none}
+nav.top .brand{font-weight:700;white-space:nowrap;letter-spacing:-.01em}
+nav.top .brand i{font-style:normal;color:var(--accent)}
+nav.top a.l{font-size:14px;color:var(--muted);text-decoration:none;white-space:nowrap}
+nav.top a.l:hover{color:var(--ink)}
+
+/* type */
+h1,h2,h3{font-family:var(--serif);font-weight:400;letter-spacing:-.01em;margin:0}
+h1{font-size:clamp(44px,7vw,88px);line-height:.95}
+h2{font-size:clamp(32px,4.2vw,48px);line-height:1.05}
+h3{font-size:24px;line-height:1.15}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.06em;color:var(--muted)}
+.eyebrow b{color:var(--accent);font-weight:600}
+.lede{font-size:18px;color:var(--ink-2);max-width:760px}
+section{padding:72px 0;border-bottom:1px solid var(--line)}
+section .head{display:grid;gap:12px;margin-bottom:32px}
+.small{font-size:13px;color:var(--muted)}
+
+/* hero */
+.hero{padding:72px 0 56px}
+.hero .meta{display:flex;flex-wrap:wrap;gap:8px 20px;margin:20px 0 40px;color:var(--muted);font-size:15px}
+.scores{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+@media (max-width:860px){.scores{grid-template-columns:repeat(2,1fr)}}
+.stat{border:1px solid var(--line);border-radius:var(--radius);padding:20px;background:var(--bg)}
+.stat .k{font-size:13px;color:var(--muted);font-weight:500}
+.stat .v{font-family:var(--serif);font-size:56px;line-height:1;margin-top:10px}
+.stat .v small{font-family:var(--sans);font-size:15px;color:var(--muted);margin-left:4px}
+.stat .s{font-size:13px;color:var(--muted);margin-top:8px}
+.ring{display:flex;align-items:center;gap:16px}
+.ring svg{flex:none}
+
+/* pills */
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap;border:1px solid transparent}
+.pill.good{background:var(--good-bg);color:var(--good)} .pill.ni{background:var(--ni-bg);color:var(--ni)} .pill.poor{background:var(--poor-bg);color:var(--poor)}
+.pill.neutral{background:var(--line-2);color:var(--ink-2)} .pill.accent{background:var(--accent-soft);color:#9d0088}
+.pill.outline{border-color:var(--line);color:var(--ink-2);background:#fff}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+/* findings */
+.findings{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px}
+.finding{border:1px solid var(--line);border-radius:var(--radius);padding:22px;display:grid;gap:10px;align-content:start}
+.finding .n{font-family:var(--serif);font-size:44px;line-height:1}
+.finding .n.hot{color:var(--accent)}
+.finding p{margin:0;color:var(--ink-2)}
+
+/* cards grid */
+.metrics{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px}
+.metric{border:1px solid var(--line);border-radius:var(--radius);padding:18px;display:grid;gap:12px}
+.metric .row{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.metric .big{font-family:var(--serif);font-size:34px;line-height:1}
+.metric .thr{font-size:12px;color:var(--muted)}
+.bar3{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--line-2)}
+.bar3 span{display:block;height:100%}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:0 0 18px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--radius);padding:3px;background:var(--panel)}
+.seg button{font:inherit;font-size:14px;border:0;background:transparent;padding:6px 12px;border-radius:6px;cursor:pointer;color:var(--muted);text-transform:lowercase}
+.seg button[aria-pressed="true"]{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08);font-weight:600}
+.seg button:focus-visible,.btn:focus-visible,th button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn{font:inherit;font-size:14px;font-weight:600;border:1px solid var(--ink);background:var(--ink);color:#fff;padding:9px 14px;border-radius:var(--radius);cursor:pointer;text-decoration:none;display:inline-flex;gap:8px;align-items:center;text-transform:lowercase}
+.btn:hover{background:#000;color:#fff}
+.btn.ghost{background:#fff;color:var(--ink);border-color:var(--line)}
+.btn.ghost:hover{border-color:var(--ink);color:var(--ink)}
+input.search{font:inherit;font-size:14px;border:1px solid var(--line);border-radius:var(--radius);padding:8px 12px;min-width:220px;text-transform:none}
+input.search:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+
+/* tables */
+.tbl-wrap{border:1px solid var(--line);border-radius:var(--radius);overflow:auto;max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line-2);vertical-align:top}
+th{position:sticky;top:0;background:var(--panel);font-weight:600;font-size:12px;color:var(--muted);white-space:nowrap;z-index:1}
+th button{all:unset;cursor:pointer;display:inline-flex;gap:4px;align-items:center}
+th button:hover{color:var(--ink)}
+th[aria-sort] button{color:var(--ink)}
+th[aria-sort="descending"] button::after{content:"↓";color:var(--accent)}
+th[aria-sort="ascending"] button::after{content:"↑";color:var(--accent)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:hover td{background:#fcfcfc}
+.url{font-family:var(--mono);font-size:12px;overflow-wrap:anywhere;color:var(--ink)}
+.two > *,.rec .body > *{min-width:0}
+td .sub{font-size:12px;color:var(--muted);margin-top:2px}
+.tbl-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 12px;font-size:13px;color:var(--muted);flex-wrap:wrap}
+
+/* charts */
+.chart{width:100%}
+.chart text{font-family:var(--sans);font-size:12px;fill:var(--ink-2)}
+.chart .lbl{fill:var(--ink)}
+.chart .val{fill:var(--muted);font-variant-numeric:tabular-nums}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:10px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media (max-width:900px){.two{grid-template-columns:1fr}}
+.panel{border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+.panel h3{margin-bottom:6px}
+
+/* plan */
+.plan-group{margin-top:40px}
+.plan-group > .gh{display:flex;align-items:baseline;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.rec{border:1px solid var(--line);border-radius:var(--radius);margin-bottom:14px;overflow:hidden}
+.rec summary{list-style:none;cursor:pointer;padding:18px 20px;display:grid;grid-template-columns:36px 1fr auto;gap:14px;align-items:start}
+.rec summary::-webkit-details-marker{display:none}
+.rec summary .idx{font-family:var(--serif);font-size:30px;line-height:1;color:var(--muted)}
+.rec[open] summary .idx{color:var(--accent)}
+.rec summary .t{font-weight:600;font-size:17px}
+.rec summary .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.rec summary .chev{transition:transform .2s;color:var(--muted);margin-top:4px}
+.rec[open] summary .chev{transform:rotate(180deg)}
+.rec .body{padding:0 20px 20px 70px;display:grid;gap:16px}
+@media (max-width:640px){.rec summary{grid-template-columns:28px 1fr auto}.rec .body{padding:0 16px 18px}}
+.rec .body h4{margin:0 0 6px;font-size:12px;font-weight:600;color:var(--muted);letter-spacing:.04em}
+.rec .body p,.rec .body ul{margin:0;color:var(--ink-2)}
+.rec .body ul{padding-left:18px}
+.risk{border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 14px;border-radius:0 var(--radius) var(--radius) 0;font-size:14px}
+.risk b{color:#9d0088}
+pre{margin:0;background:#0d0d0d;color:#f3f3f3;border-radius:var(--radius);padding:16px;overflow:auto;font:12.5px/1.6 var(--mono)}
+pre .c{color:#8a8a8a} pre .k{color:#ff7ae9}
+
+/* method */
+.method{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+.method dl{margin:0;display:grid;gap:4px}
+.method dt{font-size:12px;color:var(--muted);font-weight:600}
+.method dd{margin:0 0 10px}
+footer{padding:40px 0 64px;color:var(--muted);font-size:13px}
+.note{font-size:13px;color:var(--muted);margin-top:12px}
+</style>
+</head>
+<body>
+<nav class="top" aria-label="sections"><div class="wrap">
+  <span class="brand">darkroom <i>/</i> js audit</span>
+  <a class="l" href="#summary">summary</a><a class="l" href="#vitals">web vitals</a><a class="l" href="#scripts">heaviest js</a>
+  <a class="l" href="#third-party">third parties</a><a class="l" href="#templates">templates</a><a class="l" href="#plan">action plan</a><a class="l" href="#method">methodology</a>
+</div></nav>
+
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">darkroomagency.com <b>·</b> javascript performance audit</div>
+  <h1 style="margin-top:14px">where the javascript<br>weight comes from</h1>
+  <div class="meta" id="hero-meta"></div>
+  <div class="scores" id="hero-scores"></div>
+</div></header>
+
+<section id="summary"><div class="wrap">
+  <div class="head"><div class="eyebrow">01 <b>·</b> executive summary</div><h2>what we found</h2>
+  <p class="lede">plain-language findings for non-technical readers. every number comes from the pagespeed insights lab runs listed in the methodology.</p></div>
+  <div class="findings" id="findings"></div>
+</div></section>
+
+<section id="vitals"><div class="wrap">
+  <div class="head"><div class="eyebrow">02 <b>·</b> core web vitals</div><h2>lab metrics against google’s thresholds</h2>
+  <p class="lede">averages across every analysed page. “pass” means the site-wide average is inside google’s “good” range; the bar shows the share of pages that are good / need improvement / poor.</p></div>
+  <div class="controls"><div class="seg" data-group="vitals-strategy"></div></div>
+  <div class="metrics" id="metric-cards"></div>
+  <div class="legend"><span><i class="dot" style="background:var(--good)"></i>good</span><span><i class="dot" style="background:#e0a63a"></i>needs improvement</span><span><i class="dot" style="background:var(--poor)"></i>poor</span></div>
+
+  <div class="two" style="margin-top:40px">
+    <div class="panel">
+      <h3>distribution per template</h3>
+      <p class="small">share of pages in each rating band, per page type.</p>
+      <div class="controls" style="margin-top:14px"><div class="seg" data-group="dist-metric"></div></div>
+      <div id="dist-chart"></div>
+    </div>
+    <div class="panel">
+      <h3>real-user (field) data</h3>
+      <p class="small" id="field-note"></p>
+      <div id="field-table" style="margin-top:14px"></div>
+    </div>
+  </div>
+</div></section>
+
+<section id="scripts"><div class="wrap">
+  <div class="head"><div class="eyebrow">03 <b>·</b> heaviest javascript</div><h2>scripts ranked by waste and blocking</h2>
+  <p class="lede">every script lighthouse saw, merged across pages. “unused” is code downloaded but never executed during the page load. “blocking” is the share of long main-thread tasks (over 50 ms) attributed to the script, averaged over the pages it loads on.</p></div>
+  <div class="controls">
+    <div class="seg" data-group="scripts-strategy"></div>
+    <div class="seg" data-group="scripts-party"></div>
+    <input class="search" id="scripts-q" type="search" placeholder="filter by url or vendor" aria-label="filter scripts">
+    <a class="btn ghost" href="scripts.csv" download>download scripts.csv</a>
+  </div>
+  <div class="tbl-wrap" style="max-height:640px"><table id="scripts-table"></table></div>
+  <div class="tbl-foot"><span id="scripts-count"></span><button class="btn ghost" id="scripts-more" type="button">show all</button></div>
+</div></section>
+
+<section id="third-party"><div class="wrap">
+  <div class="head"><div class="eyebrow">04 <b>·</b> third-party scripts</div><h2>who is running code on the site</h2>
+  <p class="lede">grouped by vendor as identified by lighthouse’s entity list. anything we couldn’t identify is marked “[unknown – to verify]”. tracking and business tools are marked “confirm with the team” — nothing should be removed without the owner signing off.</p></div>
+  <div class="controls"><div class="seg" data-group="tp-strategy"></div></div>
+  <div class="panel" style="margin-bottom:20px">
+    <h3>main-thread time per page, by vendor</h3>
+    <p class="small">average milliseconds of cpu work each vendor adds to a page load (slowed-down mobile cpu on the mobile run).</p>
+    <div id="tp-chart" style="margin-top:12px"></div>
+  </div>
+  <div class="tbl-wrap"><table id="tp-table"></table></div>
+</div></section>
+
+<section id="templates"><div class="wrap">
+  <div class="head"><div class="eyebrow">05 <b>·</b> template breakdown</div><h2>which page types suffer most</h2>
+  <p class="lede">pages built from the same template share the same scripts, so a fix on one template fixes every page that uses it.</p></div>
+  <div class="controls"><div class="seg" data-group="tpl-strategy"></div></div>
+  <div class="two">
+    <div class="panel"><h3>average performance score</h3><p class="small">0–100, higher is better.</p><div id="tpl-chart" style="margin-top:12px"></div></div>
+    <div class="panel"><h3>javascript weight per page</h3><p class="small">average transfer size of scripts — first party vs third party.</p><div id="tpl-js-chart" style="margin-top:12px"></div>
+      <div class="legend"><span><i class="dot" style="background:var(--ink)"></i>first party / framer</span><span><i class="dot" style="background:var(--accent)"></i>third party</span></div></div>
+  </div>
+  <div class="tbl-wrap" style="margin-top:24px"><table id="tpl-table"></table></div>
+  <h3 style="margin:40px 0 14px">worst individual urls</h3>
+  <div class="tbl-wrap" style="max-height:560px"><table id="worst-table"></table></div>
+</div></section>
+
+<section id="plan"><div class="wrap">
+  <div class="head"><div class="eyebrow">06 <b>·</b> prioritised action plan</div><h2>what to fix, in order</h2>
+  <p class="lede">quick wins first (high impact, low effort), then larger projects, then nice-to-haves. impact is scored from wasted bytes, blocking time and the number of pages affected. savings marked “estimate” are lighthouse’s own projections, not measured results.</p></div>
+  <div id="plan-body"></div>
+</div></section>
+
+<section id="method" style="border-bottom:0"><div class="wrap">
+  <div class="head"><div class="eyebrow">07 <b>·</b> methodology</div><h2>how this was measured</h2></div>
+  <div class="method" id="method-body"></div>
+  <div id="failed-body" style="margin-top:24px"></div>
+</div></section>
+
+<footer><div class="wrap" id="foot"></div></footer>
+
+<!--DATA-->
+<script>
+(() => {
+const A = window.AUDIT, R = window.RECS;
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmtMs = (v) => v == null ? '—' : v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + ' s' : Math.round(v) + ' ms';
+const fmtB = (b) => b == null ? '—' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? Math.round(b / 1024) + ' KB' : Math.round(b) + ' B';
+const fmtN = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString('en-US', { maximumFractionDigits: d, minimumFractionDigits: d });
+const fmtMetric = (k, v) => k === 'cls' ? (v == null ? '—' : v.toFixed(3)) : k === 'score' ? fmtN(v) : fmtMs(v);
+const T = A.thresholds;
+const rate = (k, v) => v == null ? null : v <= T[k].good ? 'good' : v <= T[k].poor ? 'ni' : 'poor';
+const scoreRate = (s) => s == null ? 'neutral' : s >= 90 ? 'good' : s >= 50 ? 'ni' : 'poor';
+const COL = { good: 'var(--good)', ni: '#e0a63a', poor: 'var(--poor)' };
+const RATE_LBL = { good: 'pass', ni: 'needs work', poor: 'fail' };
+const TPL_LBL = (t) => t.replace(/-/g, ' ');
+const state = { vitals: 'mobile', dist: 'lcp', scripts: 'mobile', party: 'all', tp: 'mobile', tpl: 'mobile', showAll: false };
+
+function seg(group, options, key, onChange) {
+  const el = document.querySelector(`.seg[data-group="${group}"]`);
+  el.setAttribute('role', 'group');
+  el.innerHTML = options.map(([v, l]) => `<button type="button" data-v="${v}" aria-pressed="${state[key] === v}">${l}</button>`).join('');
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    state[key] = b.dataset.v;
+    el.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', x === b));
+    onChange();
+  });
+}
+const STRAT_LIST = A.strategies || ['mobile', 'desktop'];
+const HAS_D = STRAT_LIST.includes('desktop');
+const STRATS = STRAT_LIST.map((x) => [x, x]);
+if (!HAS_D) document.querySelectorAll('.seg[data-group$="-strategy"]').forEach((el) => (el.hidden = true));
+
+function ring(score, size = 64) {
+  const r = size / 2 - 5, c = 2 * Math.PI * r, p = (score ?? 0) / 100;
+  const col = COL[scoreRate(score)] || 'var(--muted)';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true"><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--line-2)" stroke-width="6"/><circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${col}" stroke-width="6" stroke-linecap="round" stroke-dasharray="${c * p} ${c}" transform="rotate(-90 ${size/2} ${size/2})"/></svg>`;
+}
+
+/* ---------- hero ---------- */
+const runDate = new Date(A.runWindow.last || A.generatedAt);
+const fmtDate = (d) => d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }).toLowerCase();
+$('#hero-meta').innerHTML = [
+  `run ${fmtDate(new Date(A.runWindow.first))}${A.runWindow.first?.slice(0,10) !== A.runWindow.last?.slice(0,10) ? ' – ' + fmtDate(runDate) : ''}`,
+  `${A.urlsInScope} urls in sitemap scope`,
+  HAS_D ? `${A.analysed.mobile} mobile · ${A.analysed.desktop} desktop reports` : `${A.analysed.mobile} mobile reports (desktop not included)`,
+  `lighthouse ${A.lighthouseVersions.join(', ')}`,
+].map((x) => `<span>${esc(x)}</span>`).join('');
+const hs = (k, label, val, sub, withRing) => `<div class="stat"><div class="k">${label}</div>${withRing ? `<div class="ring">${ring(val)}<div class="v">${fmtN(val)}<small>/100</small></div></div>` : `<div class="v">${val}</div>`}<div class="s">${sub}</div></div>`;
+$('#hero-scores').innerHTML =
+  hs('m', 'avg mobile performance', Math.round(A.site.mobile.score.avg), `median ${fmtN(A.site.mobile.score.median)} · range ${A.site.mobile.score.min}–${A.site.mobile.score.max}`, true) +
+  (HAS_D
+    ? hs('d', 'avg desktop performance', Math.round(A.site.desktop.score.avg), `median ${fmtN(A.site.desktop.score.median)} · range ${A.site.desktop.score.min}–${A.site.desktop.score.max}`, true)
+    : hs('l', 'avg mobile lcp', fmtMs(A.site.mobile.lcp.avg), `${A.site.mobile.lcp.dist.poor} of ${A.analysed.mobile} pages over 4 s (poor)`)) +
+  hs('p', 'pages analysed', fmtN(HAS_D ? Math.min(A.analysed.mobile, A.analysed.desktop) : A.analysed.mobile), `of ${A.urlsInScope} indexable urls · ${Object.keys(A.templateCounts).length} templates`) +
+  hs('j', 'avg javascript per page (mobile)', fmtB(A.site.mobile.jsBytes.avg), `${fmtB(A.site.mobile.unusedJsBytes.avg)} of it flagged unused`);
+
+/* ---------- findings ---------- */
+$('#findings').innerHTML = R.exec.map((f, i) => `<article class="finding"><div class="n ${i === 0 ? 'hot' : ''}">${esc(f.stat)}</div><h3>${esc(f.title)}</h3><p>${esc(f.text)}</p></article>`).join('');
+
+/* ---------- vitals ---------- */
+const MET = ['lcp', 'tbt', 'cls', 'fcp', 'si', 'tti'];
+const MET_SHORT = { lcp: 'lcp', tbt: 'tbt', cls: 'cls', fcp: 'fcp', si: 'speed index', tti: 'tti' };
+function renderVitals() {
+  const s = A.site[state.vitals];
+  $('#metric-cards').innerHTML = MET.map((k) => {
+    const m = s[k], r = rate(k, m.avg), d = m.dist, tot = d.good + d.ni + d.poor || 1;
+    const thr = k === 'cls' ? `good ≤ ${T[k].good} · poor > ${T[k].poor}` : `good ≤ ${fmtMs(T[k].good)} · poor > ${fmtMs(T[k].poor)}`;
+    return `<div class="metric"><div class="row"><span class="small" style="color:var(--ink);font-weight:600">${T[k].label.toLowerCase()}</span><span class="pill ${r}">${RATE_LBL[r]}</span></div>
+      <div class="row"><span class="big">${fmtMetric(k, m.avg)}</span><span class="small">median ${fmtMetric(k, m.median)}</span></div>
+      <div class="bar3" role="img" aria-label="${d.good} good, ${d.ni} needs improvement, ${d.poor} poor pages">${['good','ni','poor'].map((b) => `<span style="width:${d[b]/tot*100}%;background:${COL[b]}"></span>`).join('')}</div>
+      <div class="row thr"><span>${thr}</span><span>${Math.round(d.good/tot*100)}% good</span></div></div>`;
+  }).join('');
+  renderDist();
+}
+function renderDist() {
+  const bt = A.byTemplate[state.vitals], k = state.dist;
+  const rows = Object.entries(bt).map(([t, v]) => ({ t, d: v[k].dist, n: v.pages, avg: v[k].avg }))
+    .sort((a, b) => (b.d.poor / b.n) - (a.d.poor / a.n) || (b.d.ni / b.n) - (a.d.ni / a.n));
+  const W = 560, lw = 150, rh = 26, H = rows.length * rh + 4;
+  $('#dist-chart').innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="rating distribution by template">${rows.map((r, i) => {
+    const y = i * rh, bw = W - lw - 70; let x = lw;
+    const segs = ['good', 'ni', 'poor'].map((b) => { const w = r.d[b] / r.n * bw; const s = `<rect x="${x}" y="${y + 5}" width="${Math.max(0, w)}" height="16" fill="${COL[b]}"><title>${r.d[b]} ${b === 'ni' ? 'needs improvement' : b}</title></rect>`; x += w; return s; }).join('');
+    return `<text class="lbl" x="0" y="${y + 17}">${esc(TPL_LBL(r.t))} <tspan class="val">(${r.n})</tspan></text>${segs}<text class="val" x="${W - 62}" y="${y + 17}">${fmtMetric(k, r.avg)}</text>`;
+  }).join('')}</svg><p class="note">right-hand number: template average. sorted by share of poor pages.</p>`;
+}
+seg('vitals-strategy', STRATS, 'vitals', renderVitals);
+seg('dist-metric', MET.map((k) => [k, MET_SHORT[k]]), 'dist', renderDist);
+
+function renderField() {
+  const of = A.originField || {};
+  const scopeCounts = { url: 0, origin: 0, none: 0 };
+  A.pages.filter((p) => p.strategy === 'mobile').forEach((p) => scopeCounts[p.fieldScope || 'none']++);
+  $('#field-note').innerHTML = `chrome ux report (crux), 75th percentile of real chrome users over the previous 28 days. url-level field data exists for ${scopeCounts.url} of ${A.analysed.mobile} pages on mobile; the rest have too little traffic and fall back to the whole origin. field data is the closest thing to what google uses for ranking.`;
+  const rowsDef = [['LARGEST_CONTENTFUL_PAINT_MS', 'lcp', (v) => fmtMs(v), 2500, 4000], ['INTERACTION_TO_NEXT_PAINT', 'inp', (v) => fmtMs(v), 200, 500], ['CUMULATIVE_LAYOUT_SHIFT_SCORE', 'cls', (v) => (v / 100).toFixed(2), 10, 25], ['FIRST_CONTENTFUL_PAINT_MS', 'fcp', (v) => fmtMs(v), 1800, 3000], ['EXPERIMENTAL_TIME_TO_FIRST_BYTE', 'ttfb', (v) => fmtMs(v), 800, 1800]];
+  const cell = (s, key, f, g, p) => { const m = of[s]?.metrics?.[key]; if (!m) return '<td class="num">—</td>'; const r = m.percentile <= g ? 'good' : m.percentile <= p ? 'ni' : 'poor'; return `<td class="num">${f(m.percentile)} <span class="pill ${r}">${RATE_LBL[r]}</span></td>`; };
+  $('#field-table').innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>metric (origin, p75)</th>${STRAT_LIST.map((x) => `<th class="num">${x}</th>`).join('')}</tr></thead><tbody>${rowsDef.map(([key, l, f, g, p]) => `<tr><td>${l}</td>${STRAT_LIST.map((x) => cell(x, key, f, g, p)).join('')}</tr>`).join('')}
+    <tr><td>overall core web vitals</td>${STRAT_LIST.map((x) => `<td class="num">${esc((of[x]?.overall_category || '—').toLowerCase())}</td>`).join('')}</tr></tbody></table></div>
+    <p class="note">inp (interaction to next paint) has no lab equivalent; total blocking time is its lab proxy.</p>`;
+}
+renderField();
+
+/* ---------- generic sortable table ---------- */
+function sortable(table, cols, rows, sortKey, dir = -1, limit) {
+  let key = sortKey, d = dir;
+  const draw = () => {
+    const sorted = [...rows].sort((a, b) => { const x = a[key], y = b[key]; if (x == null) return 1; if (y == null) return -1; return (typeof x === 'string' ? x.localeCompare(y) : x - y) * d; });
+    const vis = limit ? sorted.slice(0, limit()) : sorted;
+    table.innerHTML = `<thead><tr>${cols.map((c) => `<th class="${c.num ? 'num' : ''}" ${c.key === key ? `aria-sort="${d < 0 ? 'descending' : 'ascending'}"` : ''} scope="col">${c.sort === false ? c.label : `<button type="button" data-k="${c.key}">${c.label}</button>`}</th>`).join('')}</tr></thead>
+      <tbody>${vis.map((r) => `<tr>${cols.map((c) => `<td class="${c.num ? 'num' : ''}">${c.render ? c.render(r) : esc(r[c.key])}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${cols.length}" class="small">no rows</td></tr>`}</tbody>`;
+    return sorted.length;
+  };
+  table.onclick = (e) => { const b = e.target.closest('th button'); if (!b) return; const k = b.dataset.k; d = k === key ? -d : (cols.find((c) => c.key === k).num ? -1 : 1); key = k; draw(); };
+  return draw();
+}
+
+/* ---------- scripts ---------- */
+const shortUrl = (u) => { try { const x = new URL(u); return x.hostname.replace(/^www\./, '') + x.pathname + (x.search || ''); } catch { return u; } };
+function renderScripts() {
+  const q = $('#scripts-q').value.trim().toLowerCase();
+  const rows = A.scripts.filter((s) => s.strategy === state.scripts)
+    .filter((s) => state.party === 'all' || (state.party === '3p' ? !s.firstParty && s.category !== 'platform' : s.firstParty || s.category === 'platform'))
+    .filter((s) => !q || (s.script + ' ' + s.vendor).toLowerCase().includes(q))
+    .map((s) => ({ ...s, blockingTotal: (s.avgBlockingMs || 0) * s.pagesLoaded }));
+  const LIMIT = 30;
+  const cols = [
+    { key: 'script', label: 'script', render: (r) => `<div class="url">${esc(shortUrl(r.script))}</div><div class="sub">${esc(r.vendor)}${r.siteWide ? ' · <b style="color:var(--accent)">site-wide</b>' : ''}</div>` },
+    { key: 'pagesLoaded', label: 'pages', num: true, render: (r) => fmtN(r.pagesLoaded) },
+    { key: 'avgTransferBytes', label: 'avg size', num: true, render: (r) => fmtB(r.avgTransferBytes) },
+    { key: 'avgWastedBytes', label: 'avg unused', num: true, render: (r) => r.pagesFlaggedUnused ? `${fmtB(r.avgWastedBytes)}<div class="sub">${r.avgUnusedPct ?? '—'}% of file</div>` : '—' },
+    { key: 'totalWastedBytes', label: 'unused, all pages', num: true, render: (r) => r.totalWastedBytes ? fmtB(r.totalWastedBytes) : '—' },
+    { key: 'avgBootupMs', label: 'cpu / page', num: true, render: (r) => r.avgBootupMs != null ? `${fmtMs(r.avgBootupMs)}<div class="sub">eval ${fmtMs(r.avgScriptingMs)} · parse ${fmtMs(r.avgParseCompileMs)}</div>` : '—' },
+    { key: 'avgBlockingMs', label: 'blocking / page', num: true, render: (r) => r.avgBlockingMs ? fmtMs(r.avgBlockingMs) : '—' },
+  ];
+  const n = sortable($('#scripts-table'), cols, rows, 'totalWastedBytes', -1, () => state.showAll ? Infinity : LIMIT);
+  $('#scripts-count').textContent = `${Math.min(n, state.showAll ? n : LIMIT)} of ${n} scripts shown · ${state.scripts}`;
+  $('#scripts-more').hidden = n <= LIMIT;
+  $('#scripts-more').textContent = state.showAll ? 'show top 30' : 'show all';
+}
+seg('scripts-strategy', STRATS, 'scripts', renderScripts);
+seg('scripts-party', [['all', 'all'], ['3p', 'third party'], ['1p', 'first party / framer']], 'party', renderScripts);
+$('#scripts-q').addEventListener('input', renderScripts);
+$('#scripts-more').addEventListener('click', () => { state.showAll = !state.showAll; renderScripts(); });
+
+/* ---------- third parties ---------- */
+const verdictClass = (v) => /remove/.test(v) ? 'poor' : /keep/.test(v) && !/confirm/.test(v) ? 'good' : /confirm/.test(v) ? 'accent' : 'ni';
+function hbar(el, rows, fmt, color) {
+  const W = 560, lw = 210, rh = 28, H = rows.length * rh + 4, max = Math.max(...rows.map((r) => r.v), 1);
+  el.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img">${rows.map((r, i) => {
+    const y = i * rh, w = (r.v / max) * (W - lw - 80);
+    return `<text class="lbl" x="0" y="${y + 18}">${esc(r.l)}</text><rect x="${lw}" y="${y + 6}" width="${Math.max(w, 1)}" height="16" rx="3" fill="${r.c || color || 'var(--ink)'}"><title>${esc(r.l)}: ${fmt(r.v)}</title></rect><text class="val" x="${lw + w + 8}" y="${y + 18}">${fmt(r.v)}</text>`;
+  }).join('')}</svg>`;
+}
+function renderTP() {
+  const rows = A.entities.filter((e) => e.strategy === state.tp);
+  hbar($('#tp-chart'), rows.filter((r) => r.avgMainThreadMs > 0).map((r) => ({ l: r.vendor, v: r.avgMainThreadMs, c: r.platform ? 'var(--ink)' : 'var(--accent)' })), fmtMs);
+  sortable($('#tp-table'), [
+    { key: 'vendor', label: 'vendor', render: (r) => `<b>${esc(r.vendor)}</b><div class="sub">${esc(r.purpose)}</div><div class="sub url">${esc(r.origins.map((o) => o.replace('https://', '')).join(', '))}</div>` },
+    { key: 'pagesLoaded', label: 'pages', num: true, render: (r) => `${fmtN(r.pagesLoaded)}<div class="sub">${Math.round(r.pagesShare * 100)}%</div>` },
+    { key: 'avgTransferBytes', label: 'avg transfer, all files', num: true, render: (r) => fmtB(r.avgTransferBytes) },
+    { key: 'avgMainThreadMs', label: 'main thread / page', num: true, render: (r) => fmtMs(r.avgMainThreadMs) },
+    { key: 'avgBlockingMs', label: 'blocking / page', num: true, render: (r) => fmtMs(r.avgBlockingMs) },
+    { key: 'owner', label: 'likely owner', render: (r) => `<span class="small">${esc(r.owner)}</span>` },
+    { key: 'verdict', label: 'verdict', render: (r) => `<span class="pill ${verdictClass(r.verdict)}">${esc(r.verdict)}</span>` },
+  ], rows, 'avgMainThreadMs');
+}
+seg('tp-strategy', STRATS, 'tp', renderTP);
+
+/* ---------- templates ---------- */
+function renderTpl() {
+  const bt = A.byTemplate[state.tpl];
+  const rows = Object.entries(bt).map(([t, v]) => ({ t, ...v }));
+  const byScore = [...rows].sort((a, b) => a.score.avg - b.score.avg);
+  hbar($('#tpl-chart'), byScore.map((r) => ({ l: `${TPL_LBL(r.t)} (${r.pages})`, v: r.score.avg, c: COL[scoreRate(r.score.avg)] })), (v) => fmtN(v));
+  // stacked js chart
+  const js = [...rows].sort((a, b) => b.jsBytes.avg - a.jsBytes.avg);
+  const W = 560, lw = 210, rh = 28, H = js.length * rh + 4, max = Math.max(...js.map((r) => r.jsBytes.avg));
+  $('#tpl-js-chart').innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="javascript bytes per template">${js.map((r, i) => {
+    const y = i * rh, bw = W - lw - 80, tp = r.jsBytes3p.avg, fp = r.jsBytes.avg - tp, w1 = fp / max * bw, w2 = tp / max * bw;
+    return `<text class="lbl" x="0" y="${y + 18}">${esc(TPL_LBL(r.t))}</text><rect x="${lw}" y="${y + 6}" width="${w1}" height="16" fill="var(--ink)"><title>first party ${fmtB(fp)}</title></rect><rect x="${lw + w1}" y="${y + 6}" width="${w2}" height="16" fill="var(--accent)"><title>third party ${fmtB(tp)}</title></rect><text class="val" x="${lw + w1 + w2 + 8}" y="${y + 18}">${fmtB(r.jsBytes.avg)}</text>`;
+  }).join('')}</svg>`;
+  sortable($('#tpl-table'), [
+    { key: 't', label: 'template', render: (r) => `<b>${esc(TPL_LBL(r.t))}</b>` },
+    { key: 'pages', label: 'pages', num: true },
+    { key: 'score', label: 'score', num: true, render: (r) => `<span class="pill ${scoreRate(r.score)}">${fmtN(r.score)}</span>` },
+    { key: 'lcp', label: 'lcp', num: true, render: (r) => `<span style="color:${COL[rate('lcp', r.lcp)]}">${fmtMs(r.lcp)}</span>` },
+    { key: 'tbt', label: 'tbt', num: true, render: (r) => `<span style="color:${COL[rate('tbt', r.tbt)]}">${fmtMs(r.tbt)}</span>` },
+    { key: 'cls', label: 'cls', num: true, render: (r) => `<span style="color:${COL[rate('cls', r.cls)]}">${fmtMetric('cls', r.cls)}</span>` },
+    { key: 'bootup', label: 'js cpu', num: true, render: (r) => fmtMs(r.bootup) },
+    { key: 'jsBytes', label: 'js size', num: true, render: (r) => fmtB(r.jsBytes) },
+    { key: 'unusedJsBytes', label: 'unused js', num: true, render: (r) => fmtB(r.unusedJsBytes) },
+  ], rows.map((r) => ({ t: r.t, pages: r.pages, ...Object.fromEntries(['score', 'lcp', 'tbt', 'cls', 'bootup', 'jsBytes', 'unusedJsBytes'].map((k) => [k, r[k].avg])) })), 'score', 1);
+  const worst = A.pages.filter((p) => p.strategy === state.tpl);
+  sortable($('#worst-table'), [
+    { key: 'url', label: 'url', render: (r) => `<a class="url" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url.replace('https://www.darkroomagency.com', '') || '/')}</a><div class="sub">${esc(TPL_LBL(r.template))}</div>` },
+    { key: 'score', label: 'score', num: true, render: (r) => `<span class="pill ${scoreRate(r.score)}">${r.score}</span>` },
+    { key: 'lcp', label: 'lcp', num: true, render: (r) => `<span style="color:${COL[rate('lcp', r.lcp)]}">${fmtMs(r.lcp)}</span>` },
+    { key: 'tbt', label: 'tbt', num: true, render: (r) => `<span style="color:${COL[rate('tbt', r.tbt)]}">${fmtMs(r.tbt)}</span>` },
+    { key: 'cls', label: 'cls', num: true, render: (r) => fmtMetric('cls', r.cls) },
+    { key: 'bootup', label: 'js cpu', num: true, render: (r) => fmtMs(r.bootup) },
+    { key: 'jsBytes', label: 'js size', num: true, render: (r) => fmtB(r.jsBytes) },
+    { key: 'totalBytes', label: 'page weight', num: true, render: (r) => fmtB(r.totalBytes) },
+  ], worst, 'score', 1, () => 25);
+}
+seg('tpl-strategy', STRATS, 'tpl', renderTpl);
+
+/* ---------- plan ---------- */
+const lvl = (v) => v === 'High' ? 'poor' : v === 'Medium' ? 'ni' : 'neutral';
+const effortCls = (v) => v === 'Low' ? 'good' : v === 'Medium' ? 'ni' : 'poor';
+let idx = 0;
+$('#plan-body').innerHTML = R.plan.map((g) => `<div class="plan-group"><div class="gh"><h3 style="font-size:32px">${esc(g.group)}</h3><span class="small">${esc(g.blurb)}</span></div>
+  ${g.items.map((it) => { idx++; return `<details class="rec" ${idx <= 1 ? 'open' : ''}><summary><span class="idx">${String(idx).padStart(2, '0')}</span>
+    <div><div class="t">${esc(it.title)}</div><div class="chips"><span class="pill ${lvl(it.impact)}">impact: ${it.impact.toLowerCase()}</span><span class="pill ${effortCls(it.effort)}">effort: ${it.effort.toLowerCase()}</span><span class="pill outline">${esc(it.owner)}</span>${it.metrics.map((m) => `<span class="pill neutral">${esc(m)}</span>`).join('')}</div></div>
+    <svg class="chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+    <div class="body">
+      <div><h4>the issue</h4><p>${esc(it.issue)}</p></div>
+      <div><h4>evidence</h4><ul>${it.evidence.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>
+      <div><h4>the fix</h4><p>${esc(it.fix).replace(/“([^”]+)”/g, "“<span class=\"keep-case\">$1</span>”")}</p></div>
+      ${it.code ? `<pre><code>${esc(it.code)}</code></pre>` : ''}
+      ${it.risk ? `<div class="risk"><b>risk:</b> ${esc(it.risk)}</div>` : ''}
+    </div></details>`; }).join('')}</div>`).join('');
+
+/* ---------- methodology ---------- */
+const ua = A.userAgents || {};
+$('#method-body').innerHTML = `
+  <div class="panel"><dl><dt>data source</dt><dd>google pagespeed insights api v5 (<code>runPagespeed</code>), <code>category=performance</code>, one run per url, ${HAS_D ? 'mobile and desktop' : 'mobile only'}</dd>
+    <dt>lighthouse version</dt><dd>${esc(A.lighthouseVersions.join(', '))}</dd>
+    <dt>run window</dt><dd class="keep-case">${esc(A.runWindow.first)} → ${esc(A.runWindow.last)} (utc)</dd></dl></div>
+  <div class="panel"><dl><dt>mobile settings</dt><dd>lighthouse default mobile emulation: moto g power-class device, 4× cpu slowdown, simulated slow 4g throttling</dd>
+    ${HAS_D ? '<dt>desktop settings</dt><dd>lighthouse default desktop: 1350×940 viewport, no cpu slowdown, simulated broadband throttling</dd>' : '<dt>desktop</dt><dd>not included in this edition. the desktop run was stopped early to deliver the report sooner; every number here is mobile. mobile is the stricter test (slower cpu and network), so it is where javascript cost shows most.</dd>'}
+    <dt>scope</dt><dd>${A.urlsInScope} indexable html urls from <code>/sitemap.xml</code> (6 redirecting sitemap entries excluded)</dd></dl></div>
+  <div class="panel"><dl><dt>definitions</dt><dd>“site-wide” = loads on ≥ ${Math.round(A.siteWideThreshold * 100)}% of analysed pages. “blocking” = sum of (long-task duration − 50 ms) attributed to a script; lighthouse 13 no longer reports per-vendor blocking time, so it is derived. “unused” = lighthouse’s unused-javascript estimate at page load.</dd></dl></div>
+  <div class="panel"><dl><dt>limitations</dt><dd>lab data is a single simulated load on google’s servers — results vary run to run (often ±5–10 score points), so compare averages and patterns rather than single urls. lab tests do not click, scroll or consent to cookies, so interaction-triggered scripts are under-counted. field data (crux) reflects real users but is mostly origin-level here. byte savings are lighthouse estimates, not measured results.</dd></dl></div>`;
+const failedM = A.failed.mobile || [], failedD = A.failed.desktop || [];
+$('#failed-body').innerHTML = (failedM.length || failedD.length)
+  ? `<div class="panel"><h3>pages with no data</h3><p class="small">these urls failed after retries and are excluded from all averages.</p><ul class="url" style="margin-top:10px">${[...failedM.map((u) => [u, 'mobile']), ...failedD.map((u) => [u, 'desktop'])].map(([u, s]) => `<li>${esc(u)} — ${s}</li>`).join('')}</ul></div>`
+  : `<div class="panel"><h3>pages with no data</h3><p class="small" style="margin:0">none — every url in scope returned a ${HAS_D ? 'report for both mobile and desktop' : 'mobile report'}.</p></div>`;
+$('#foot').innerHTML = `generated ${esc(fmtDate(new Date(A.generatedAt)))} from ${A.analysed.mobile + (A.analysed.desktop || 0)} pagespeed insights reports · raw data: <a href="scripts.csv" download>scripts.csv</a>`;
+
+renderVitals(); renderScripts(); renderTP(); renderTpl();
+})();
+</script>
+</body>
+</html>

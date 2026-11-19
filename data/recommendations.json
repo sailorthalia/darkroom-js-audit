@@ -1,0 +1,278 @@
+{
+ "exec": [
+  {
+   "stat": "64/100",
+   "title": "average mobile score",
+   "text": "the average page scores 64 out of 100 on a mid-range phone. 93% of pages are slower than google’s 2.5-second target for showing their main content on mobile."
+  },
+  {
+   "stat": "66%",
+   "title": "of the javascript is third-party",
+   "text": "of the 1.7 MB of javascript a typical page downloads on mobile, about 66% comes from marketing, analytics and video tools rather than the site itself. most of it loads while the page is still being drawn."
+  },
+  {
+   "stat": "2×",
+   "title": "google ads tag loaded twice",
+   "text": "the same google ads tag is downloaded twice on 100% of pages, about 150 KB extra each time. removing the duplicate is a small change; conversion tracking just needs to be re-checked afterwards."
+  },
+  {
+   "stat": "863 ms",
+   "title": "page frozen by javascript",
+   "text": "on a typical phone the page is too busy running javascript to respond to taps for about 863 ms while loading (total blocking time; google’s target is under 200 ms). 243 of 475 pages are over 600 ms, which google rates “poor”."
+  },
+  {
+   "stat": "2.0 s",
+   "title": "of processor work per page",
+   "text": "framer’s own code (1.2 s), google’s tags (512 ms) and the meta pixel (258 ms) are the biggest consumers of a phone’s processor on each page load (lab, slowed-down mobile cpu)."
+  },
+  {
+   "stat": "60",
+   "title": "worst template: location",
+   "text": "location pages (4) average 60 on mobile, against 78 for other pages. fixes in the shared site template help every page type at once."
+  }
+ ],
+ "plan": [
+  {
+   "group": "quick wins",
+   "blurb": "high impact, low effort — do these first",
+   "items": [
+    {
+     "title": "fire ad pixels after the page has loaded, not during it",
+     "impact": "High",
+     "impactPts": 9.71,
+     "effort": "Low",
+     "owner": "marketing (gtm owner) + framer site editor",
+     "metrics": [
+      "tbt",
+      "inp",
+      "lcp"
+     ],
+     "issue": "the meta pixel and the vector pixel start downloading and executing while the page is still rendering. their work competes with framer’s own javascript for the main thread on a slow phone, which pushes back interactivity and the largest paint. they are loaded from two different places, so the fix has two parts.",
+     "evidence": [
+      "meta (connect.facebook.net): on 475 of 475 pages, avg 274 KB transfer, 258 ms main-thread and 221 ms blocking per page (mobile).",
+      "vector (cdn.vector.co/pixel.js): on 475 of 475 pages, avg 70 KB transfer, 64 ms main-thread and 41 ms blocking per page (mobile).",
+      "lighthouse flags 117 KB of that code as unused during the page load (avg per page, mobile).",
+      "where each one is loaded (checked in the live page source and the published gtm container, not from pagespeed data): the meta pixel (570736630527046) is a tag inside gtm-kk9p2zg. vector is not in gtm. it is hard-coded in framer → site settings → custom code, in the snippet placed at the end of <head>, which also holds the gtm loader, a google-site-verification meta tag and the organisation schema."
+     ],
+     "fix": "meta (in gtm): move the meta pixel tag from the “all pages / page view” trigger to a custom event trigger named “page_idle”, which fires once the page has finished loading. it still fires on every page view, just after the page is usable. vector (in framer): open site settings → custom code, find the end-of-<head> snippet that starts with “<!-- Google Tag Manager -->”, and replace only the vector <script> block (the one that starts with “function drDenied()” and ends with “vector.load(…)”) with the version below. keep the gtm loader, the verification meta tag and the schema in that snippet untouched. this one script also pushes the “page_idle” event for gtm. if the team decides vector is no longer needed, delete that block instead.",
+     "code": "<!-- framer → site settings → custom code → end of <head> snippet -->\n<!-- replaces the existing vector <script> block only -->\n<script>\n(function(){\n  // consent check, copied unchanged from the current snippet\n  function drDenied(){\n    if (window.drConsent) return !window.drConsent.allowed();\n    if (navigator.globalPrivacyControl === true) return true;\n    try {\n      for (var i = 0; i < localStorage.length; i++) {\n        var k = localStorage.key(i), v = localStorage.getItem(k);\n        if (!v || v.charAt(0) !== \"{\") continue;\n        var o = JSON.parse(v);\n        if (o && typeof o === \"object\" && (\"analytics\" in o || \"marketing\" in o)) {\n          return (o.analytics === false && o.marketing === false);\n        }\n      }\n    } catch (e) {}\n    return false;\n  }\n\n  function loadVector(){\n    if (drDenied() || window.vector) return;   // same consent rule as today\n    var t = { q: [] };\n    ['load', 'identify', 'on'].forEach(function (m) {\n      t[m] = function () { t.q.push([m, [].slice.call(arguments)]); };\n    });\n    window.vector = t;\n    var s = document.createElement('script');\n    s.async = true;\n    s.src = 'https://cdn.vector.co/pixel.js';\n    document.head.appendChild(s);\n    t.loaded = true;\n    vector.load('b2a50759-7547-4b2b-9861-b362bf585b99');\n  }\n\n  function whenIdle(){\n    (window.requestIdleCallback || function (cb) { setTimeout(cb, 1); })(function () {\n      loadVector();\n      window.dataLayer = window.dataLayer || [];\n      window.dataLayer.push({ event: 'page_idle' });   // gtm trigger for the meta pixel\n    }, { timeout: 3000 });\n  }\n\n  if (document.readyState === 'complete') whenIdle();\n  else window.addEventListener('load', whenIdle, { once: true });\n})();\n</script>\n\n// gtm: triggers → new → custom event → event name \"page_idle\"\n// meta pixel tag: replace the \"all pages\" trigger with \"page_idle\"",
+     "risk": "both are paid-media and attribution tools. confirm with the team first, and change the vector block only, not the whole snippet (deleting the snippet would also remove gtm, the site-verification tag and the schema). firing later: firing later can slightly lower recorded page views for visitors who leave within the first seconds. check event counts in meta events manager and vector for a week after the change."
+    },
+    {
+     "title": "stop loading the google ads tag AW-650107332 twice",
+     "impact": "High",
+     "impactPts": 4.31,
+     "effort": "Low",
+     "owner": "marketing / tag-manager owner + developer",
+     "metrics": [
+      "tbt",
+      "lcp",
+      "js weight"
+     ],
+     "issue": "the gtag.js library for AW-650107332 is requested twice on the same page: once from a hard-coded snippet and once more by google tag manager (the second copy carries gtm’s “&cx=c&gtm=…” parameters). the browser downloads, parses and runs the same library twice.",
+     "evidence": [
+      "AW-650107332 loaded more than once on 475 of 475 mobile pages (100%).",
+      "the second copy adds 150 KB of transfer per page on average (mobile, measured from the network log).",
+      "both copies together (mobile, per page): 295 KB transfer, 90 KB flagged unused, 135 ms cpu, 86 ms blocking.",
+      "removing one copy saves ~150 KB per page view and roughly half of that cpu time — estimate."
+     ],
+     "fix": "keep a single copy. because gtm already loads AW-650107332, delete the hard-coded gtag snippet for AW-650107332 from framer → site settings → custom code (head), and keep the google ads / google tag configured inside gtm. while there, check whether the ga4 tag that is also hard-coded can move into gtm so all google tags load through one container.",
+     "code": "<!-- framer → site settings → custom code → <head> -->\n<!-- REMOVE this block: gtm already loads AW-650107332 -->\n<script async src=\"https://www.googletagmanager.com/gtag/js?id=AW-650107332\"></script>\n<script>\n  window.dataLayer = window.dataLayer || [];\n  function gtag(){dataLayer.push(arguments);}\n  gtag('js', new Date());\n  gtag('config', 'AW-650107332');\n</script>\n<!-- KEEP the gtm container snippet; configure AW-650107332 as a\n     \"google tag\" / \"google ads conversion\" tag inside GTM-… -->",
+     "risk": "google ads conversion tracking and remarketing depend on this tag. confirm with the team first: check which copy fires the conversion events, then verify in gtm preview and google tag assistant that conversions still record before publishing."
+    },
+    {
+     "title": "load the hubspot chat widget only when someone wants to chat",
+     "impact": "High",
+     "impactPts": 2.02,
+     "effort": "Low",
+     "owner": "developer + marketing (hubspot owner)",
+     "metrics": [
+      "tbt",
+      "inp"
+     ],
+     "issue": "the hubspot tracking loader pulls in four more scripts on every page: the chat widget, the cookie banner, analytics and the ads pixel. the chat widget is needed only by the few visitors who open it.",
+     "evidence": [
+      "js.hs-scripts.com/4521931.js: on 475 pages, avg 2 KB, 64 ms cpu per page (mobile).",
+      "js.usemessages.com/conversations-embed.js: on 475 pages, avg 32 KB, 78 ms cpu per page (mobile).",
+      "js.hs-banner.com/v2/4521931/banner.js: on 475 pages, avg 25 KB, 87 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795100100000/4521931.js: on 16 pages, avg 44 KB, 257 ms cpu per page (mobile).",
+      "js.hsadspixel.net/pixels.js: on 475 pages, avg 6 KB, 104 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795100400000/4521931.js: on 35 pages, avg 44 KB, 292 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795100700000/4521931.js: on 35 pages, avg 44 KB, 325 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795101000000/4521931.js: on 26 pages, avg 44 KB, 365 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795101300000/4521931.js: on 25 pages, avg 44 KB, 286 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795101600000/4521931.js: on 29 pages, avg 44 KB, 337 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795101900000/4521931.js: on 34 pages, avg 44 KB, 306 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795102200000/4521931.js: on 32 pages, avg 44 KB, 307 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795102500000/4521931.js: on 35 pages, avg 44 KB, 328 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795102800000/4521931.js: on 29 pages, avg 44 KB, 435 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795103100000/4521931.js: on 33 pages, avg 44 KB, 261 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795103400000/4521931.js: on 38 pages, avg 44 KB, 309 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795103700000/4521931.js: on 29 pages, avg 44 KB, 334 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795104000000/4521931.js: on 30 pages, avg 44 KB, 370 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795104300000/4521931.js: on 31 pages, avg 44 KB, 289 ms cpu per page (mobile).",
+      "js.hs-analytics.net/analytics/1795104600000/4521931.js: on 18 pages, avg 44 KB, 309 ms cpu per page (mobile).",
+      "hubspot entity total: 59 ms main-thread per page; chat widget (usemessages.com): 23 ms."
+     ],
+     "fix": "tell hubspot not to load the chat widget immediately and load it on the first interaction (or when a “chat with us” button is clicked). keep the analytics and cookie banner as they are.",
+     "code": "<!-- before the hubspot loader (js.hs-scripts.com/4521931.js) -->\n<script>\n  window.hsConversationsSettings = { loadImmediately: false };\n  const loadChat = () => {\n    window.HubSpotConversations?.widget?.load();\n    ['pointerdown','keydown','scroll'].forEach(e => removeEventListener(e, loadChat));\n  };\n  window.hsConversationsOnReady = [() => {\n    ['pointerdown','keydown','scroll'].forEach(e =>\n      addEventListener(e, loadChat, { once: true, passive: true }));\n  }];\n</script>",
+     "risk": "chat is a sales channel and hs-banner.com is the hubspot cookie-consent banner. confirm with the team first. do not delay the consent banner (that can conflict with consent requirements); only the chat widget is changed here."
+    }
+   ]
+  },
+  {
+   "group": "major projects",
+   "blurb": "high impact, more effort or coordination",
+   "items": [
+    {
+     "title": "clean up the tag manager container and load google analytics through it",
+     "impact": "High",
+     "impactPts": 8.96,
+     "effort": "Medium",
+     "owner": "marketing / tag-manager owner",
+     "metrics": [
+      "tbt",
+      "js weight"
+     ],
+     "issue": "the gtm container and the separately hard-coded ga4 library are among the heaviest scripts on every page, and most of their code is unused during the page load. old or paused tags, unused variables and duplicated google tags all make the container larger.",
+     "evidence": [
+      "googletagmanager.com/gtm.js?id=GTM-KK9P2ZG: avg 133 KB, 66 KB unused (49.6%), 149 ms cpu per page, on 475 of 475 pages (mobile).",
+      "googletagmanager.com/gtag/js?id=G-BKPG1X43JY (hard-coded): avg 202 KB, 74 KB unused, 291 ms cpu per page."
+     ],
+     "fix": "export the container and review every tag: delete paused or legacy tags, remove unused custom html tags and variables, and set triggers so page-specific tags (e.g. form or booking conversions) fire only on the pages that need them. then configure ga4 as a google tag inside gtm and remove the hard-coded ga4 snippet from framer custom code.",
+     "code": "// fire page-specific tags only where needed\n// gtm → trigger → page view → \"some page views\"\n//   page path  matches regex  ^/book-a-call\n// attach booking / form conversion tags to this trigger",
+     "risk": "every tag in the container may be used for reporting or ad attribution. confirm with the team first, use gtm’s workspace + preview mode, and keep a container export as a rollback."
+    },
+    {
+     "title": "slim down framer’s own javascript: fewer effects and heavy components",
+     "impact": "High",
+     "impactPts": 12.49,
+     "effort": "High",
+     "owner": "developer / framer designer",
+     "metrics": [
+      "tbt",
+      "lcp",
+      "tti"
+     ],
+     "issue": "framer ships react, its animation library (motion) and a bundle per component on every page. it is the largest single source of main-thread work. the platform code itself can’t be removed or self-hosted, but how much of it runs depends on how pages are built: scroll and appear effects, code components, and elements hidden per breakpoint still being rendered.",
+     "evidence": [
+      "framer javascript: 588 KB of script transfer and 1.2 s main-thread work per page on mobile, on 475 of 475 pages.",
+      "react.Da4LRgXc.mjs: 1.2 s cpu, 0 KB unused of 45 KB (avg, mobile, 475 pages).",
+      "motion.CKqD_qlq.mjs: 896 ms cpu, 26 KB unused of 51 KB (avg, mobile, 475 pages).",
+      "TestimonialMarquee.DqxPnm74.mjs: 605 ms cpu, 0 KB unused of 3 KB (avg, mobile, 5 pages).",
+      "q6C4NcKIL.B7urkOMq.mjs: 134 ms cpu, 0 KB unused of 10 KB (avg, mobile, 406 pages).",
+      "core framer bundles flagged unused: 96 KB per page (lighthouse estimate)."
+     ],
+     "fix": "audit the master components used site-wide (nav, footer, hero, cta blocks): remove scroll-linked and appear effects that aren’t essential, replace layers hidden on mobile with breakpoint-specific variants instead of hidden copies, and check custom code components (e.g. liquidgradient, darkroomvimeo) for heavy work on load. re-test the homepage, one case study and one article after each change.",
+     "code": null,
+     "risk": "design-led change — no tracking impact, but it changes how pages feel. agree with design which effects are brand-critical before removing them."
+    },
+    {
+     "title": "replace vimeo players with a lightweight poster until played",
+     "impact": "Medium",
+     "impactPts": 0.42,
+     "effort": "Medium",
+     "owner": "developer",
+     "metrics": [
+      "tbt",
+      "lcp",
+      "page weight"
+     ],
+     "issue": "pages with video embed the full vimeo player (iframe + player javascript + the video stream) on load, even before the visitor scrolls to it or presses play.",
+     "evidence": [
+      "vimeo loads on 31 of 475 mobile pages (case study 13, service 11, location 4, company 1, homepage 1, other 1).",
+      "on those pages it averages 2.8 MB transfer (player code plus video bytes), 110 ms main-thread and 111 ms blocking (mobile).",
+      "f.vimeocdn.com/p/4.46.152/js/player.module.js: avg 225 KB, 124 KB unused, 542 ms cpu.",
+      "f.vimeocdn.com/p/4.46.152/js/vendor.module.js: avg 93 KB, 47 KB unused, 284 ms cpu.",
+      "f.vimeocdn.com/js_opt/modules/utils/vuid.min.js: avg 2 KB, 0 KB unused, — cpu."
+     ],
+     "fix": "in the custom “darkroomvimeo” framer component, render a poster image (vimeo thumbnail or a static frame) with a play button, and only inject the vimeo iframe on click. for decorative autoplay loops, use a muted self-hosted mp4 with preload=\"none\" that starts when it scrolls into view.",
+     "code": "// DarkroomVimeo code component — facade pattern\nexport default function VimeoFacade({ id, poster, title }) {\n  const [play, setPlay] = React.useState(false)\n  if (play) return (\n    <iframe src={`https://player.vimeo.com/video/${id}?autoplay=1`}\n      allow=\"autoplay; fullscreen\" title={title} loading=\"lazy\"\n      style={{ width: \"100%\", aspectRatio: \"16/9\", border: 0 }} />)\n  return (\n    <button onClick={() => setPlay(true)} aria-label={`play ${title}`}\n      style={{ all: \"unset\", cursor: \"pointer\", display: \"block\", width: \"100%\" }}>\n      <img src={poster} alt=\"\" loading=\"lazy\" style={{ width: \"100%\", aspectRatio: \"16/9\", objectFit: \"cover\" }} />\n    </button>)\n}",
+     "risk": "no tracking impact. if any video is meant to autoplay as a hero background, keep autoplay but switch to a lightweight muted mp4; confirm the intent with design/content."
+    }
+   ]
+  },
+  {
+   "group": "nice-to-haves",
+   "blurb": "smaller gains or housekeeping",
+   "items": [
+    {
+     "title": "show the hero headline and image without waiting for an animation",
+     "impact": "Low",
+     "impactPts": null,
+     "effort": "Low",
+     "owner": "developer / framer designer",
+     "metrics": [
+      "lcp"
+     ],
+     "issue": "on many pages the largest element above the fold (usually the h1 or hero image) uses a framer “appear” effect. it starts invisible or offset and only reaches its final state after framer’s javascript has downloaded, run and animated it, so the largest contentful paint waits for javascript.",
+     "evidence": [
+      "15 of 475 mobile pages (3%) have an lcp element still carrying framer’s inline opacity/transform animation styles.",
+      "most affected templates (mobile): case study (15).",
+      "lcp element type on mobile: img 425, h1 31, video 10, p 7, div 2 — 40 pages have text as the largest element.",
+      "average lab lcp 5.9 s on mobile; 442 of 475 pages are in google’s “poor” band (> 4 s).",
+      "the observed (unthrottled) element render delay averages 424 ms on mobile — the time between the page being able to paint the element and actually painting it."
+     ],
+     "fix": "in framer, remove the appear effect (or set its initial opacity to 100% and animate only position) on the hero h1, hero image and any element above the fold on mobile breakpoints. keep entrance animations for content further down the page.",
+     "code": "/* if an appear effect has to stay, animate only transform,\n   never start the hero at opacity 0. in framer:\n   hero h1 → effects → appear → opacity: 1 (start) → 1 (end)\n                              → offset y: 12 → 0            */\n\n/* equivalent css for a code component / override */\n.hero-title { opacity: 1; animation: rise .4s ease-out both; }\n@keyframes rise { from { transform: translateY(12px); } to { transform: none; } }",
+     "risk": "purely visual — no tracking impact. check with design that the hero still feels right without the fade."
+    },
+    {
+     "title": "turn off framer’s on-page editor bar for visitors",
+     "impact": "Low",
+     "impactPts": null,
+     "effort": "Low",
+     "owner": "developer / framer admin",
+     "metrics": [
+      "requests"
+     ],
+     "issue": "every page also requests framer’s editor-bar scripts (framer.com/edit/init.mjs, framer.com/bootstrap…js, app.framerstatic.com/editorbar…). they are used for editing the site from the browser and add requests for normal visitors.",
+     "evidence": [
+      "editor-bar scripts load on 475 of 475 mobile pages: 8 requests, 18 KB per page."
+     ],
+     "fix": "in framer’s site settings, switch off the on-page editing / editor bar option for the published site, then republish and confirm the requests are gone.",
+     "code": null,
+     "risk": "content editors who use on-page editing would lose that shortcut. confirm with whoever maintains the site."
+    },
+    {
+     "title": "ask vendors for modern builds of their scripts",
+     "impact": "Low",
+     "impactPts": null,
+     "effort": "Low",
+     "owner": "marketing (vendor contact)",
+     "metrics": [
+      "js weight"
+     ],
+     "issue": "some third-party scripts still ship polyfills and old-browser transforms that modern browsers don’t need. you can’t change vendor code, but you can ask, or prefer vendors that ship modern bundles.",
+     "evidence": [
+      "cdn.vector.co/pixel.js: ~15 KB of legacy code on 475 pages (e.g. @babel/plugin-transform-classes, @babel/plugin-transform-regenerator, @babel/plugin-transform-spread).",
+      "connect.facebook.net/en_US/fbevents.js: ~11 KB of legacy code on 475 pages (e.g. @babel/plugin-transform-classes, @babel/plugin-transform-regenerator, @babel/plugin-transform-spread).",
+      "f.vimeocdn.com/p/4.46.152/js/vendor.module.js: ~12 KB of legacy code on 25 pages (e.g. @babel/plugin-transform-classes, Array.prototype.findLast, Array.prototype.findLastIndex)."
+     ],
+     "fix": "no site change needed; raise it with the vendor. treat it as a tie-breaker when reviewing tools.",
+     "code": null,
+     "risk": null
+    },
+    {
+     "title": "identify the unlabelled tracking endpoint",
+     "impact": "Low",
+     "impactPts": null,
+     "effort": "Low",
+     "owner": "developer + marketing",
+     "metrics": [
+      "governance"
+     ],
+     "issue": "at least one script sends data to a domain that lighthouse can’t attribute to a known vendor. it costs almost nothing in performance, but every tool on the site should have a known owner.",
+     "evidence": [
+      "darkroom-careers.vercel.app: on 1 of 475 pages, 107 KB per page. [UNKNOWN – TO VERIFY]",
+      "ov-1d104299d2a447049cdc73700c9309f7.ecs.us-west-2.on.aws: on 475 of 475 pages, 0 KB per page. [UNKNOWN – TO VERIFY]"
+     ],
+     "fix": "search the gtm container and framer custom code for this host to find which tag calls it, then record its owner and purpose.",
+     "code": null,
+     "risk": "confirm with the team first — do not block it until its owner is known."
+    }
+   ]
+  }
+ ],
+ "impactRule": "points = share of pages affected × (unused kb ÷ 50 + blocking ms ÷ 50 + cpu ms ÷ 150); high ≥ 2, medium ≥ 0.75"
+}
