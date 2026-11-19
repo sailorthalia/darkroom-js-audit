@@ -49,6 +49,8 @@ const add = (bucket, item) => plan[bucket].push(item);
 
 // =====================================================================
 // 1. Duplicate Google tags
+// Where the tags come from was checked by hand on 2026-11-19 in the live page source and the
+// published GTM container (version 17). That isn't PageSpeed data, so the evidence says so.
 const dupIds = Object.entries(S.signals[M].duplicateGoogleTags).sort((a, b) => b[1] - a[1]);
 if (dupIds.length) {
   const [id, pagesDup] = dupIds[0];
@@ -58,29 +60,37 @@ if (dupIds.length) {
   // the duplicate costs its own transfer + roughly half the combined cpu / blocking of both copies
   const im = impactOf({ share: pagesDup / N[M], wasted: extra, cpu: (one.avgBootupMs || 0) / 2, blocking: (one.avgBlockingMs || 0) / 2 });
   add('quick', {
-    title: `stop loading the google ads tag ${id} twice`,
-    impact: im.level, impactPts: im.pts, effort: 'Low', owner: 'marketing / tag-manager owner + developer',
+    title: `stop the google ads tag ${id} loading twice: set up ga4 in one place only`,
+    impact: im.level, impactPts: im.pts, effort: 'Low', owner: 'framer site editor + analytics / paid-media owner',
     metrics: ['tbt', 'lcp', 'js weight'],
-    issue: `the gtag.js library for ${id} is requested twice on the same page: once from a hard-coded snippet and once more by google tag manager (the second copy carries gtm’s “&cx=c&gtm=…” parameters). the browser downloads, parses and runs the same library twice.`,
+    issue: `the gtag.js library for ${id} is downloaded twice on every page. it isn't hard-coded anywhere: google analytics 4 (G-BKPG1X43JY) is linked to google ads, and each ga4 setup loads its own copy of the ads library. ga4 is set up twice, once by framer’s built-in google analytics setting and once by the google tag inside gtm, so the ads library arrives twice (the gtm copy carries “&cx=c&gtm=…” in its url).`,
     evidence: [
       `${id} loaded more than once on ${pagesDup} of ${N[M]} mobile pages (${pct(pagesDup / N[M])})${HAS_D ? `; desktop: ${S.signals[D].duplicateGoogleTags[id] ?? 0} of ${N[D]}` : ''}.`,
       `the second copy adds ${kb(extra)} of transfer per page on average (mobile, measured from the network log).`,
       `both copies together (mobile, per page): ${kb(one.avgTransferBytes)} transfer, ${kb(one.avgWastedBytes)} flagged unused, ${one.avgBootupMs != null ? ms(one.avgBootupMs) : '—'} cpu, ${ms(one.avgBlockingMs || 0)} blocking.`,
-      `removing one copy saves ~${kb(extra)} per page view and roughly half of that cpu time — estimate.`,
+      `ga4 still sends exactly one page_view per page (all ${N[M]} mobile pages), so reporting isn't double-counted today. only the ads library is duplicated.`,
+      'where the tags come from (checked in the live page source and the published gtm container, not from pagespeed data): AW-650107332 is not in the html, not in gtm and not in the ga4 library. framer adds gtag(\'config\', \'G-BKPG1X43JY\') and the ga4 library outside the custom code snippets, which is its built-in google analytics setting. gtm has a google tag for the same G-BKPG1X43JY on “initialization – all pages”. both ads copies load about 1 s after the ga4 hit, which fits ga4’s linked-ads loading. this is the most likely cause, not a proven one.',
+      `removing one ga4 setup should save ~${kb(extra)} per page view and roughly half of the ads library’s cpu time. this is an estimate: the ga4 library itself stays, loaded by gtm instead of framer.`,
     ],
-    fix: `keep a single copy. because gtm already loads ${id}, delete the hard-coded gtag snippet for ${id} from framer → site settings → custom code (head), and keep the google ads / google tag configured inside gtm. while there, check whether the ga4 tag that is also hard-coded can move into gtm so all google tags load through one container.`,
-    code: `<!-- framer → site settings → custom code → <head> -->
-<!-- REMOVE this block: gtm already loads ${id} -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=${id}"></script>
+    fix: `keep ga4 in gtm only. in framer → site settings, clear the google analytics / measurement id field and publish. that removes framer’s inline gtag('config', …) block and its gtag.js script. keep the google tag (G-BKPG1X43JY) in gtm as it is: it already sends page views, and the generate_lead and newsletter_signup events already live in gtm. don't add a separate google ads tag in gtm, because that would bring the duplicate back. the consent snippets define their own gtag() function, so consent mode keeps working without framer’s copy.`,
+    code: `<!-- added by framer's built-in google analytics setting -->
+<!-- clearing the measurement id field in site settings removes both parts -->
 <script>
   window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
+  function gtag(){window.dataLayer.push(arguments);}
   gtag('js', new Date());
-  gtag('config', '${id}');
+  gtag('config', 'G-BKPG1X43JY');
 </script>
-<!-- KEEP the gtm container snippet; configure ${id} as a
-     "google tag" / "google ads conversion" tag inside GTM-… -->`,
-    risk: `google ads conversion tracking and remarketing depend on this tag. confirm with the team first: check which copy fires the conversion events, then verify in gtm preview and google tag assistant that conversions still record before publishing.`,
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-BKPG1X43JY"></script>
+
+// after publishing, check in chrome devtools → network, filter "gtag/js":
+//   gtag/js?id=G-BKPG1X43JY&cx=c…   one request, loaded by gtm
+//   gtag/js?id=${id}                one request (was two)
+// then check ga4 realtime still shows page views, and google ads → goals →
+// conversions keeps recording over the next few days.
+// if ${id} still loads twice, check the google tag's linked destinations
+// in google ads → tools → google tag.`,
+    risk: `ga4 reporting and google ads conversions (most likely imported from ga4 key events, since gtm has no ads conversion tag) depend on these tags. confirm with the analytics and paid-media owners first, then check ga4 realtime and ads conversions after publishing. the link between ga4 and the double ads load is the most likely explanation, not a certainty: if the duplicate remains after the change, the source is somewhere else.`,
   });
 }
 
@@ -264,27 +274,35 @@ export default function VimeoFacade({ id, poster, title }) {
 
 // =====================================================================
 // 7. GTM container hygiene
+// Container contents were checked by hand on 2026-11-19 (published GTM-KK9P2ZG, version 17).
 {
   const gtm = scripts(M, /gtm\.js\?id=/);
-  const ga4 = scripts(M, /gtag\/js\?id=G-/);
   if (gtm.length) {
     const g = gtm[0];
-    const im = impactOf({ share: g.pagesShare, wasted: g.avgWastedBytes + (ga4[0]?.avgWastedBytes || 0), blocking: (g.avgBlockingMs || 0) + (ga4[0]?.avgBlockingMs || 0), cpu: (g.avgBootupMs || 0) + (ga4[0]?.avgBootupMs || 0) });
+    // only gtm's own cost: the ga4 library stays on the page after consolidation (gtm loads it instead of framer)
+    const im = impactOf({ share: g.pagesShare, wasted: g.avgWastedBytes, blocking: g.avgBlockingMs || 0, cpu: g.avgBootupMs || 0 });
     add('major', {
-      title: 'clean up the tag manager container and load google analytics through it',
+      title: 'clean up the tag manager container',
       impact: im.level, impactPts: im.pts, effort: 'Medium', owner: 'marketing / tag-manager owner',
       metrics: ['tbt', 'js weight'],
-      issue: 'the gtm container and the separately hard-coded ga4 library are among the heaviest scripts on every page, and most of their code is unused during the page load. old or paused tags, unused variables and duplicated google tags all make the container larger.',
+      issue: 'the gtm container loads on every page, and about half of its code is unused during the page load. it still carries paused tags from the universal analytics era, and several tags run on every page while it is still loading.',
       evidence: [
         `${g.script.replace('https://www.', '')}: avg ${kb(g.avgTransferBytes)}, ${kb(g.avgWastedBytes)} unused (${g.avgUnusedPct}%), ${ms(g.avgBootupMs || 0)} cpu per page, on ${g.pagesLoaded} of ${N[M]} pages (mobile).`,
-        ...ga4.map((r) => `${r.script.replace('https://www.', '')} (hard-coded): avg ${kb(r.avgTransferBytes)}, ${kb(r.avgWastedBytes)} unused, ${ms(r.avgBootupMs || 0)} cpu per page.`),
+        'container contents (checked in the published container, version 17, not from pagespeed data): 26 entries (counting gtm’s built-in listeners), of which 11 are paused tags. 8 of the paused tags are universal analytics tags, and universal analytics stopped processing data in 2024. the others are 2 paused custom html tags and 1 paused ga4 event tag.',
+        'tags that run on every page as soon as gtm starts: the meta pixel, the hubspot loader and microsoft clarity (all custom html), plus the conversion linker and the click, form and visibility listeners. the google tag (G-BKPG1X43JY) and a framer form listener run on “initialization – all pages”.',
       ],
-      fix: 'export the container and review every tag: delete paused or legacy tags, remove unused custom html tags and variables, and set triggers so page-specific tags (e.g. form or booking conversions) fire only on the pages that need them. then configure ga4 as a google tag inside gtm and remove the hard-coded ga4 snippet from framer custom code.',
-      code: `// fire page-specific tags only where needed
+      fix: 'make a container export first as a rollback. then delete the 8 paused universal analytics tags, and the paused custom html and ga4 event tags if nobody needs them, along with any variables and triggers only they used. keep the conversion linker, which google ads needs, and the form, click and visibility listeners. move microsoft clarity from “all pages” to a “window loaded” trigger. the meta pixel and hubspot chat have their own fixes above. ga4 consolidation is covered by the google ads fix: keep ga4 in gtm and remove framer’s copy.',
+      code: `// gtm → tags → filter "paused"
+//   delete: 8 × universal analytics (ua), 2 × custom html, 1 × ga4 event
+//   then: variables / triggers → delete the ones marked "not used"
+//
+// gtm → tags → microsoft clarity → triggering
+//   replace "all pages" with "window loaded"
+//
+// fire page-specific tags only where needed
 // gtm → trigger → page view → "some page views"
-//   page path  matches regex  ^/book-a-call
-// attach booking / form conversion tags to this trigger`,
-      risk: 'every tag in the container may be used for reporting or ad attribution. confirm with the team first, use gtm’s workspace + preview mode, and keep a container export as a rollback.',
+//   page path  matches regex  ^/book-a-call`,
+      risk: 'every tag in the container may be used for reporting or ad attribution. confirm with the team first, work in a gtm workspace with preview mode, and keep the container export as a rollback. clarity on “window loaded” records slightly fewer very short sessions.',
     });
   }
 }
@@ -374,7 +392,7 @@ for (const k of Object.keys(plan)) plan[k].sort((a, b) => rank[b.impact] - rank[
   if (dup) {
     exec.push({
       stat: '2×', title: 'google ads tag loaded twice',
-      text: `the same google ads tag is downloaded twice on ${pct(dup[1] / N[M])} of pages, about ${kb(sig.avgDuplicateTagExtraBytes)} extra each time. removing the duplicate is a small change; conversion tracking just needs to be re-checked afterwards.`,
+      text: `the same google ads tag is downloaded twice on ${pct(dup[1] / N[M])} of pages, about ${kb(sig.avgDuplicateTagExtraBytes)} extra each time. it comes from ga4 being set up twice (in framer and in gtm). keeping only the gtm copy is a small change; conversion tracking just needs to be re-checked afterwards.`,
     });
   }
   if (sig.lcpAnimatedPages / N[M] >= 0.1) {
