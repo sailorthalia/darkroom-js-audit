@@ -93,69 +93,42 @@ const fbE = entity(M, 'Facebook'), vecE = entity(M, 'vector.co'), hsE = entity(M
   const share = Math.max(fb.share, vec.share);
   const im = impactOf({ share, wasted: fb.wasted + vec.wasted, blocking: (fbE?.avgBlockingMs || 0) + (vecE?.avgBlockingMs || 0), cpu: (fbE?.avgMainThreadMs || 0) + (vecE?.avgMainThreadMs || 0) });
   add('quick', {
-    title: 'fire ad pixels after the page has loaded, not during it',
+    title: 'remove the vector pixel and fire the meta pixel after the page has loaded',
     impact: im.level, impactPts: im.pts, effort: 'Low', owner: 'marketing (gtm owner) + framer site editor',
     metrics: ['tbt', 'inp', 'lcp'],
-    issue: 'the meta pixel and the vector pixel start downloading and executing while the page is still rendering. their work competes with framer’s own javascript for the main thread on a slow phone, which pushes back interactivity and the largest paint. they are loaded from two different places, so the fix has two parts.',
+    issue: 'the meta pixel and the vector pixel start downloading and executing while the page is still rendering. their work competes with framer’s own javascript for the main thread on a slow phone, which pushes back interactivity and the largest paint. they are loaded from two different places, so the fix has two parts. the team has decided to remove vector rather than defer it.',
     evidence: [
       fbE ? `meta (connect.facebook.net): on ${fbE.pagesLoaded} of ${N[M]} pages, avg ${kb(fbE.avgTransferBytes)} transfer, ${ms(fbE.avgMainThreadMs)} main-thread and ${ms(fbE.avgBlockingMs)} blocking per page (mobile).` : null,
       vecE ? `vector (cdn.vector.co/pixel.js): on ${vecE.pagesLoaded} of ${N[M]} pages, avg ${kb(vecE.avgTransferBytes)} transfer, ${ms(vecE.avgMainThreadMs)} main-thread and ${ms(vecE.avgBlockingMs)} blocking per page (mobile).` : null,
       `lighthouse flags ${kb(fb.wasted + vec.wasted)} of that code as unused during the page load (avg per page, mobile).`,
       'where each one is loaded (checked in the live page source and the published gtm container, not from pagespeed data): the meta pixel (570736630527046) is a tag inside gtm-kk9p2zg. vector is not in gtm. it is hard-coded in framer → site settings → custom code, in the snippet placed at the end of <head>, which also holds the gtm loader, a google-site-verification meta tag and the organisation schema.',
     ].filter(Boolean),
-    fix: 'meta (in gtm): move the meta pixel tag from the “all pages / page view” trigger to a custom event trigger named “page_idle”, which fires once the page has finished loading. it still fires on every page view, just after the page is usable. vector (in framer): open site settings → custom code, find the end-of-<head> snippet that starts with “<!-- Google Tag Manager -->”, and replace only the vector <script> block (the one that starts with “function drDenied()” and ends with “vector.load(…)”) with the version below. keep the gtm loader, the verification meta tag and the schema in that snippet untouched. this one script also pushes the “page_idle” event for gtm. if the team decides vector is no longer needed, delete that block instead.',
-    code: `<!-- framer → site settings → custom code → end of <head> snippet -->
-<!-- replaces the existing vector <script> block only -->
+    fix: 'vector (in framer), remove: the team has decided to remove vector. open site settings → custom code, find the end-of-<head> snippet that starts with “<!-- Google Tag Manager -->”, and delete only the vector <script> block (the one that starts with “(function(){ function drDenied()” and ends with “vector.load(…); })();</script>”). keep the gtm loader, the google-site-verification meta tag and the organisation schema in that snippet untouched, then publish. meta (in gtm), defer: add the small script below to framer’s custom code (end of <body>) so it pushes a “page_idle” event once the page has loaded, then move the meta pixel tag in gtm from the “all pages / page view” trigger to a custom event trigger named “page_idle”. it still fires on every page view, just after the page is usable.',
+    code: `<!-- 1. framer → site settings → custom code → end of <head> snippet -->
+<!-- delete only this block; keep gtm, the verification meta tag and the schema -->
 <script>
 (function(){
-  // consent check, copied unchanged from the current snippet
-  function drDenied(){
-    if (window.drConsent) return !window.drConsent.allowed();
-    if (navigator.globalPrivacyControl === true) return true;
-    try {
-      for (var i = 0; i < localStorage.length; i++) {
-        var k = localStorage.key(i), v = localStorage.getItem(k);
-        if (!v || v.charAt(0) !== "{") continue;
-        var o = JSON.parse(v);
-        if (o && typeof o === "object" && ("analytics" in o || "marketing" in o)) {
-          return (o.analytics === false && o.marketing === false);
-        }
-      }
-    } catch (e) {}
-    return false;
-  }
-
-  function loadVector(){
-    if (drDenied() || window.vector) return;   // same consent rule as today
-    var t = { q: [] };
-    ['load', 'identify', 'on'].forEach(function (m) {
-      t[m] = function () { t.q.push([m, [].slice.call(arguments)]); };
-    });
-    window.vector = t;
-    var s = document.createElement('script');
-    s.async = true;
-    s.src = 'https://cdn.vector.co/pixel.js';
-    document.head.appendChild(s);
-    t.loaded = true;
-    vector.load('b2a50759-7547-4b2b-9861-b362bf585b99');
-  }
-
-  function whenIdle(){
-    (window.requestIdleCallback || function (cb) { setTimeout(cb, 1); })(function () {
-      loadVector();
-      window.dataLayer = window.dataLayer || [];
-      window.dataLayer.push({ event: 'page_idle' });   // gtm trigger for the meta pixel
-    }, { timeout: 3000 });
-  }
-
-  if (document.readyState === 'complete') whenIdle();
-  else window.addEventListener('load', whenIdle, { once: true });
+  function drDenied(){ ... }
+  if (drDenied()) return;
+  !function(e,r){ ... i.src="https://cdn.vector.co/pixel.js"; ... }(window,document);
+  vector.load("b2a50759-7547-4b2b-9861-b362bf585b99");
 })();
 </script>
 
-// gtm: triggers → new → custom event → event name "page_idle"
-// meta pixel tag: replace the "all pages" trigger with "page_idle"`,
-    risk: 'both are paid-media and attribution tools. confirm with the team first, and change the vector block only, not the whole snippet (deleting the snippet would also remove gtm, the site-verification tag and the schema). firing later: firing later can slightly lower recorded page views for visitors who leave within the first seconds. check event counts in meta events manager and vector for a week after the change.',
+<!-- 2. framer → site settings → custom code → end of <body> (new snippet) -->
+<!-- pushes an "idle" event for gtm once the page has finished loading -->
+<script>
+window.addEventListener('load', function () {
+  (window.requestIdleCallback || function (cb) { setTimeout(cb, 1); })(function () {
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({ event: 'page_idle' });
+  }, { timeout: 3000 });
+});
+</script>
+
+// 3. gtm: triggers → new → custom event → event name "page_idle"
+//    meta pixel tag: replace the "all pages" trigger with "page_idle"`,
+    risk: 'removing vector stops its company-identification data and any audiences built from it; make sure whoever uses vector (sales / growth) knows the date it goes. delete the vector block only, not the whole snippet: deleting the snippet would also remove gtm, the site-verification tag and the schema. after publishing, check devtools → network for “vector” (there should be no requests). firing meta later can slightly lower recorded page views for visitors who leave within the first seconds, so watch event counts in meta events manager for a week after the change.',
   });
 }
 

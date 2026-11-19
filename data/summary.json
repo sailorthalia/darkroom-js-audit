@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-11-19T16:30:39.331Z",
+ "generatedAt": "2026-11-19T16:55:46.479Z",
  "source": "PageSpeed Insights API v5 (runPagespeed), category=performance",
  "lighthouseVersions": [
   "13.6.0"
@@ -2323,7 +2323,7 @@
    "vendor": "Vector (vector.co)",
    "purpose": "Vector B2B visitor-identification / intent ad pixel",
    "category": "advertising",
-   "verdict": "defer (confirm with the team)",
+   "verdict": "remove (team decision)",
    "owner": "marketing / growth",
    "firstParty": false,
    "platform": false,

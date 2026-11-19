@@ -39,7 +39,7 @@ export const VENDORS = [
   },
   {
     vendor: 'Vector (vector.co)', entities: ['vector.co'], hosts: ['vector.co'],
-    purpose: 'Vector B2B visitor-identification / intent ad pixel', category: 'advertising', verdict: 'defer (confirm with the team)', owner: 'marketing / growth',
+    purpose: 'Vector B2B visitor-identification / intent ad pixel', category: 'advertising', verdict: 'remove (team decision)', owner: 'marketing / growth',
   },
   {
     vendor: 'LinkedIn Insight Tag', entities: ['LinkedIn', 'LinkedIn Ads'], hosts: ['licdn.com', 'linkedin.com', 'ads.linkedin.com', 'px.ads.linkedin.com'],
