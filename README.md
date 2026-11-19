@@ -3,7 +3,11 @@
 A site-wide audit of JavaScript cost on https://www.darkroomagency.com/, built from
 PageSpeed Insights (Lighthouse) lab runs for every indexable URL, mobile and desktop.
 
-**Open the report:** double-click `site/index.html` (it's self-contained; no server needed).
+**View the report online:** https://sailorthalia.github.io/darkroom-js-audit/
+
+Or open it locally: double-click `site/index.html` (it's self-contained; no server needed).
+The online copy is republished by GitHub Pages (`.github/workflows/pages.yml`) whenever
+`site/` changes on `main`.
 
 ## Folder structure
 
